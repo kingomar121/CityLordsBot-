@@ -3,7 +3,8 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from supabase import create_client, Client
 
-BOT_TOKEN = os.getenv("8992764491:AAHvGED3d3LW8RaKYc50DQZvx-pVaCPUxaw")
+import os
+BOT_TOKEN = os.getenv("8992764491:AAG3EEWYRnHVWFpjEbgxHbCQablPu5Sb-W8")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
