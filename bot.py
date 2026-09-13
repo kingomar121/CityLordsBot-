@@ -10,7 +10,7 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-def get_vendor_by_slug(slug):)
+def get_vendor_by_slug(slug):
 
 def get_vendor_by_slug(slug):
     res = supabase.table("vendors").select("*").eq("slug", slug).execute()
