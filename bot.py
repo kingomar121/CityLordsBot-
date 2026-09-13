@@ -4,7 +4,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Cont
 from supabase import create_client, Client
 
 import os
-BOT_TOKEN = os.getenv("8992764491:AAG3EEWYRnHVWFpjEbgxHbCQablPu5Sb-W8")
+TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
 ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
