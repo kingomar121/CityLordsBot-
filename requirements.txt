@@ -1,3 +1,5 @@
 python-telegram-bot==21.6
 supabase==2.15.3
 httpx==0.28.1
+Flask
+gunicorn
