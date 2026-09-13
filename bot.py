@@ -79,13 +79,31 @@ async def addvendor(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         await update.message.reply_text(f"Error: {e}")
 
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+
+class HealthHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.send_response(200)
+        self.end_headers()
+        self.wfile.write(b"CityLords Bot is running")
+    def log_message(self, format, *args):
+        return
+
+def run_web_server():
+    port = int(os.getenv("PORT", "10000"))
+    server = HTTPServer(("", port), HealthHandler)
+    server.serve_forever()
+
 def main():
+    threading.Thread(target=run_web_server, daemon=True).start()
     app = Application.builder().token(BOT_TOKEN).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("dashboard", dashboard))
     app.add_handler(CommandHandler("admin", admin))
     app.add_handler(CommandHandler("addvendor", addvendor))
     app.add_handler(CallbackQueryHandler(button_handler))
+    print("Bot started...")
     app.run_polling()
 
 if __name__ == "__main__":
