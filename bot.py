@@ -11,8 +11,6 @@ ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_KEY)
 
 def get_vendor_by_slug(slug):
-
-def get_vendor_by_slug(slug):
     res = supabase.table("vendors").select("*").eq("slug", slug).execute()
     return res.data[0] if res.data else None
 
@@ -65,11 +63,13 @@ async def dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
 
 async def admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id!= ADMIN_ID: return
+    if update.effective_user.id!= ADMIN_ID:
+        return
     await update.message.reply_text("Admin: Use /addvendor slug shopname whatsapp")
 
 async def addvendor(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id!= ADMIN_ID: return
+    if update.effective_user.id!= ADMIN_ID:
+        return
     try:
         slug = context.args[0]
         whatsapp = context.args[-1]
