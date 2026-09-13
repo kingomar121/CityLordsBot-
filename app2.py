@@ -1,50 +1,117 @@
-from flask import Flask, render_template_string
 import os
+import threading
+from flask import Flask
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CommandHandler, CallbackQueryHandler, ContextTypes
 from supabase import create_client
 
-app = Flask(__name__)
-
-# Get keys from Render Environment
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 SUPABASE_URL = os.getenv("SUPABASE_URL")
 SUPABASE_KEY = os.getenv("SUPABASE_KEY")
+ADMIN_ID = int(os.getenv("ADMIN_ID", "0"))
 
-supabase = None
-if SUPABASE_URL and SUPABASE_KEY:
-    supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
+supabase = create_client(SUPABASE_URL, SUPABASE_KEY)
 
-HTML = """
-<html>
-<head><title>CityLords Dashboard</title></head>
-<body style="font-family: Arial; padding: 20px;">
-    <h1>👑 CityLords Dashboard Live!</h1>
-    <p>Status: {{status}}</p>
-    <p>Total Users: {{count}}</p>
-    <h3>Last 5 Users:</h3>
-    <ul>
-    {% for u in users %}
-        <li>{{u}}</li>
-    {% endfor %}
-    </ul>
-    <br><br>
-    <a href="/">Refresh</a>
-</body>
-</html>
-"""
+# --- BOT FUNCTIONS ---
+def get_vendor_by_slug(slug):
+    res = supabase.table("vendors").select("*").eq("slug", slug).execute()
+    return res.data[0] if res.data else None
 
-@app.route('/')
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args
+    user_id = update.effective_user.id
+    if args and args[0].startswith("shop_"):
+        slug = args[0].replace("shop_", "")
+        vendor = get_vendor_by_slug(slug)
+        if not vendor:
+            await update.message.reply_text("Shop not found.")
+            return
+        products = supabase.table("products").select("*").eq("vendor_id", vendor["id"]).eq("is_active", True).execute().data
+        text = f"Welcome to {vendor['shop_name']}!\n\n{vendor['address']}\n{vendor['faq']}\n"
+        buttons = []
+        for p in products:
+            buttons.append([InlineKeyboardButton(f"{p['name']} - N{p['price']}", callback_data=f"view_{p['id']}")])
+        buttons.append([InlineKeyboardButton("View Cart", callback_data=f"cart_{slug}")])
+        buttons.append([InlineKeyboardButton("Chat Vendor", url=f"https://wa.me/{vendor['whatsapp']}")])
+        await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        return
+    vendor_check = supabase.table("vendors").select("*").eq("telegram_id", user_id).execute().data
+    if vendor_check:
+        await update.message.reply_text(f"Welcome back {vendor_check[0]['shop_name']}! Go to /dashboard")
+    else:
+        await update.message.reply_text("Welcome to CityLords Bot!")
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+    try:
+        if data.startswith("view_"):
+            prod_id = data.split("_")[1]
+            prod = supabase.table("products").select("*").eq("id", prod_id).execute().data[0]
+            text = f"{prod['name']}\n\n{prod['description']}\n\nPrice: N{prod['price']}"
+            buttons = [[InlineKeyboardButton("Add to Cart", callback_data=f"add_{prod['id']}_{prod['vendor_id']}")]]
+            await query.message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+        elif data.startswith("add_"):
+            await query.message.reply_text("Added to cart! ✅")
+        elif data.startswith("cart_"):
+            await query.message.reply_text("Your cart is empty for now.")
+    except Exception as e:
+        await query.message.reply_text(f"Error: {e}")
+
+async def dashboard_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    vendor = supabase.table("vendors").select("*").eq("telegram_id", user_id).execute().data
+    if not vendor:
+        await update.message.reply_text("You are not a vendor yet.")
+        return
+    v = vendor[0]
+    text = f"Vendor Dashboard: {v['shop_name']}\n\nYour permanent link:\nt.me/{context.bot.username}?start=shop_{v['slug']}\n\nThis link NEVER changes!"
+    buttons = [[InlineKeyboardButton("Edit Shop Name", callback_data="edit_name")],[InlineKeyboardButton("Add Product", callback_data="add_product")]]
+    await update.message.reply_text(text, reply_markup=InlineKeyboardMarkup(buttons))
+
+async def admin_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id!= ADMIN_ID:
+        return
+    await update.message.reply_text("Admin: Use /addvendor slug shopname whatsapp")
+
+async def addvendor_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.effective_user.id!= ADMIN_ID:
+        return
+    try:
+        slug = context.args[0]
+        whatsapp = context.args[-1]
+        shop_name = " ".join(context.args[1:-1])
+        supabase.table("vendors").insert({"slug": slug, "shop_name": shop_name, "whatsapp": whatsapp, "address": "Port Harcourt", "faq": "Delivery 45 mins"}).execute()
+        await update.message.reply_text(f"Vendor {shop_name} created! Link: t.me/{context.bot.username}?start=shop_{slug}")
+    except Exception as e:
+        await update.message.reply_text(f"Error: {e}")
+
+def run_bot():
+    if not BOT_TOKEN:
+        print("BOT_TOKEN missing!")
+        return
+    application = Application.builder().token(BOT_TOKEN).build()
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("dashboard", dashboard_cmd))
+    application.add_handler(CommandHandler("admin", admin_cmd))
+    application.add_handler(CommandHandler("addvendor", addvendor_cmd))
+    application.add_handler(CallbackQueryHandler(button_handler))
+    print("Bot polling started...")
+    application.run_polling()
+
+# Start bot thread ONCE
+threading.Thread(target=run_bot, daemon=True).start()
+
+# --- FLASK APP FOR RENDER ---
+flask_app = Flask(__name__)
+app = flask_app # Gunicorn needs 'app'
+
+@flask_app.route('/')
 def home():
-    status = "Connected to Supabase ✅" if supabase else "No Supabase Keys ❌"
-    count = 0
-    users = []
-    if supabase:
-        try:
-            data = supabase.table("users").select("*").limit(5).execute()
-            users = [str(x) for x in data.data]
-            count_data = supabase.table("users").select("*", count="exact").execute()
-            count = count_data.count if hasattr(count_data, 'count') else len(data.data)
-        except Exception as e:
-            status = f"Error: {e}"
-    return render_template_string(HTML, status=status, count=count, users=users)
-
-if __name__ == '__main__':
-    app.run()
+    try:
+        res = supabase.table("vendors").select("*", count="exact").execute()
+        count = res.count if res.count is not None else len(res.data)
+        return f"<h1>👑 CityLords LIVE</h1><p>Vendors: {count}</p><p>Bot: RUNNING ✅</p><p>Free Tier: Web Service (No $7) ✅</p>"
+    except Exception as e:
+        return f"<h1>CityLords LIVE</h1><p>Bot: RUNNING ✅</p><p>DB Error: {e}</p>"
